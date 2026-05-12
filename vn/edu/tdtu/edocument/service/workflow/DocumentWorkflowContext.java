@@ -21,17 +21,7 @@ public class DocumentWorkflowContext {
 
     public static DocumentWorkflowContext fromDraft(Document draft) {
         Document.Builder builder = draft.toBuilder();
-        int step = draft.currentStep;
-        DocumentWorkflowState state;
-
-        if (step <= 1) {
-            state = new Step1PersonalInfoState();
-        } else if (step == 2) {
-            state = new Step2AttachmentState();
-        } else {
-            state = new Step3ConfirmationState();
-        }
-
+        DocumentWorkflowState state = resolveStateFromStep(draft.currentStep);
         return new DocumentWorkflowContext(builder, state);
     }
 
@@ -47,13 +37,14 @@ public class DocumentWorkflowContext {
         return state.getStep();
     }
 
-    public void updateStep1(String applicantName, String applicantEmail, String applicantPhone) {
-        builder.applicantInfo(applicantName, applicantEmail, applicantPhone);
+    public void updateStep1(String applicantName, String applicantEmail, String applicantPhone, String applicantNotificationChannels) {
+        builder.applicantInfo(applicantName, applicantEmail, applicantPhone, applicantNotificationChannels);
     }
 
     public void updateStep2(String officerName, String officerEmail, String officerPhone,
-                            String documentType, String filePath, String fileExtension, long fileSizeKB) {
-        builder.officerInfo(officerName, officerEmail, officerPhone)
+                            String officerNotificationChannels, String documentType,
+                            String filePath, String fileExtension, long fileSizeKB) {
+        builder.officerInfo(officerName, officerEmail, officerPhone, officerNotificationChannels)
                 .attachment(documentType, filePath, fileExtension, fileSizeKB);
     }
 
@@ -66,15 +57,10 @@ public class DocumentWorkflowContext {
     }
 
     public void previousStep() {
-        int step = state.getStep();
-        if (step <= 1) {
+        if (state.getStep() <= 1) {
             return;
         }
-        if (step == 3) {
-            state = new Step2AttachmentState();
-        } else {
-            state = new Step1PersonalInfoState();
-        }
+        state = resolveStateFromStep(state.getStep() - 1);
     }
 
     public Document saveDraft(DocumentProcessor processor) {
@@ -92,5 +78,15 @@ public class DocumentWorkflowContext {
                 .build();
         processor.process(submission);
         return submission;
+    }
+
+    private static DocumentWorkflowState resolveStateFromStep(int step) {
+        if (step <= 1) {
+            return new Step1PersonalInfoState();
+        }
+        if (step == 2) {
+            return new Step2AttachmentState();
+        }
+        return new Step3ConfirmationState();
     }
 }

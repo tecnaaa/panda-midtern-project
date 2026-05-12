@@ -11,6 +11,8 @@ import java.io.File;
 public class AddDocumentDialog extends JDialog {
     private JTextField txtApplicantName, txtApplicantEmail, txtApplicantPhone;
     private JTextField txtOfficerName, txtOfficerEmail, txtOfficerPhone;
+    private JComboBox<String> cbApplicantNotificationChannels;
+    private JComboBox<String> cbOfficerNotificationChannels;
     private JComboBox<String> cbDocumentType;
     private JTextField txtDigitalSignature;
     private JLabel lblFileName;
@@ -29,10 +31,16 @@ public class AddDocumentDialog extends JDialog {
     private final DocumentWorkflowContext workflowContext;
 
     public AddDocumentDialog(MainSwingUI parent, DocumentProcessor processor) {
+        this(parent, processor, null);
+    }
+
+    public AddDocumentDialog(MainSwingUI parent, DocumentProcessor processor, Document draftDocument) {
         super(parent, "Tiếp nhận hồ sơ mới", true);
         this.parent = parent;
         this.processor = processor;
-        this.workflowContext = DocumentWorkflowContext.newDraft();
+        this.workflowContext = draftDocument == null
+                ? DocumentWorkflowContext.newDraft()
+                : DocumentWorkflowContext.fromDraft(draftDocument);
 
         setSize(520, 520);
         setLocationRelativeTo(parent);
@@ -69,7 +77,28 @@ public class AddDocumentDialog extends JDialog {
         btnSubmit.addActionListener(e -> submitAction());
         btnCancel.addActionListener(e -> dispose());
 
+        if (draftDocument != null) {
+            loadDraftToForm(draftDocument);
+        }
         updateStepUI();
+    }
+
+    private void submitAction() {
+        try {
+            syncCurrentStepData();
+            Document doc = workflowContext.submit(processor);
+            if ("DANG_XET_DUYET".equals(doc.status)) {
+                parent.addDocumentToList(doc);
+                dispose();
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Hồ sơ không hợp lệ. Vui lòng kiểm tra lại log.",
+                        "Lỗi",
+                        JOptionPane.ERROR_MESSAGE);
+            }
+        } catch (IllegalStateException ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Thiếu dữ liệu", JOptionPane.WARNING_MESSAGE);
+        }
     }
 
     private JPanel buildStep1Panel() {
@@ -79,10 +108,12 @@ public class AddDocumentDialog extends JDialog {
         txtApplicantName = createTextField();
         txtApplicantEmail = createTextField();
         txtApplicantPhone = createTextField();
+        cbApplicantNotificationChannels = createNotificationChannelComboBox();
 
         addFormRow(form, 0, "Tên người nộp:", txtApplicantName);
         addFormRow(form, 1, "Email người nộp:", txtApplicantEmail);
         addFormRow(form, 2, "SĐT người nộp:", txtApplicantPhone);
+        addFormRow(form, 3, "Kênh thông báo:", cbApplicantNotificationChannels);
 
         panel.add(form, BorderLayout.NORTH);
         return panel;
@@ -98,14 +129,16 @@ public class AddDocumentDialog extends JDialog {
         txtOfficerEmail.setText("officer@tdtu.edu.vn");
         txtOfficerPhone = createTextField();
         txtOfficerPhone.setText("0123456789");
+        cbOfficerNotificationChannels = createNotificationChannelComboBox();
 
         addFormRow(form, 0, "Tên cán bộ:", txtOfficerName);
         addFormRow(form, 1, "Email cán bộ:", txtOfficerEmail);
         addFormRow(form, 2, "SĐT cán bộ:", txtOfficerPhone);
+        addFormRow(form, 3, "Kênh thông báo:", cbOfficerNotificationChannels);
 
         cbDocumentType = new JComboBox<>(new String[]{"DON_XIN_PHEP", "BAO_CAO", "HO_SO_THUE"});
         cbDocumentType.setPreferredSize(new Dimension(240, 28));
-        addFormRow(form, 3, "Loại hồ sơ:", cbDocumentType);
+        addFormRow(form, 4, "Loại hồ sơ:", cbDocumentType);
 
         JButton btnFile = new JButton("Chọn...");
         lblFileName = new JLabel("Chưa chọn");
@@ -113,7 +146,7 @@ public class AddDocumentDialog extends JDialog {
         pFile.add(btnFile);
         pFile.add(Box.createHorizontalStrut(8));
         pFile.add(lblFileName);
-        addFormRow(form, 4, "Tập tin đính kèm:", pFile);
+        addFormRow(form, 5, "Tập tin đính kèm:", pFile);
 
         panel.add(form, BorderLayout.NORTH);
 
@@ -161,6 +194,21 @@ public class AddDocumentDialog extends JDialog {
         JTextField field = new JTextField();
         field.setPreferredSize(new Dimension(240, 28));
         return field;
+    }
+
+    private JComboBox<String> createNotificationChannelComboBox() {
+        JComboBox<String> comboBox = new JComboBox<>(new String[]{
+                "EMAIL",
+                "SMS",
+                "APP_PUSH",
+                "EMAIL,SMS",
+                "EMAIL,APP_PUSH",
+                "SMS,APP_PUSH",
+                "EMAIL,SMS,APP_PUSH"
+        });
+        comboBox.setPreferredSize(new Dimension(240, 28));
+        comboBox.setSelectedItem("EMAIL,SMS");
+        return comboBox;
     }
 
     private void addFormRow(JPanel form, int row, String labelText, JComponent field) {
@@ -242,7 +290,8 @@ public class AddDocumentDialog extends JDialog {
             workflowContext.updateStep1(
                     txtApplicantName.getText().trim(),
                     txtApplicantEmail.getText().trim(),
-                    txtApplicantPhone.getText().trim()
+                    txtApplicantPhone.getText().trim(),
+                    cbApplicantNotificationChannels.getSelectedItem().toString()
             );
             return;
         }
@@ -271,6 +320,7 @@ public class AddDocumentDialog extends JDialog {
                     txtOfficerName.getText().trim(),
                     txtOfficerEmail.getText().trim(),
                     txtOfficerPhone.getText().trim(),
+                    cbOfficerNotificationChannels.getSelectedItem().toString(),
                     cbDocumentType.getSelectedItem().toString(),
                     filePath,
                     ext,
@@ -282,21 +332,42 @@ public class AddDocumentDialog extends JDialog {
         workflowContext.updateStep3(txtDigitalSignature.getText().trim());
     }
 
-    private void submitAction() {
-        try {
-            syncCurrentStepData();
-            Document doc = workflowContext.submit(processor);
-            if ("DANG_XET_DUYET".equals(doc.status)) {
-                parent.addDocumentToList(doc);
-                dispose();
-            } else {
-                JOptionPane.showMessageDialog(this,
-                        "Hồ sơ không hợp lệ. Vui lòng kiểm tra lại log.",
-                        "Lỗi",
-                        JOptionPane.ERROR_MESSAGE);
-            }
-        } catch (IllegalStateException ex) {
-            JOptionPane.showMessageDialog(this, ex.getMessage(), "Thiếu dữ liệu", JOptionPane.WARNING_MESSAGE);
+    private void loadDraftToForm(Document draft) {
+        txtApplicantName.setText(safeText(draft.applicantName));
+        txtApplicantEmail.setText(safeText(draft.applicantEmail));
+        txtApplicantPhone.setText(safeText(draft.applicantPhone));
+        cbApplicantNotificationChannels.setSelectedItem(normalizeNotificationChoice(draft.applicantNotificationChannels));
+
+        txtOfficerName.setText(safeText(draft.officerName));
+        txtOfficerEmail.setText(safeText(draft.officerEmail));
+        txtOfficerPhone.setText(safeText(draft.officerPhone));
+        cbOfficerNotificationChannels.setSelectedItem(normalizeNotificationChoice(draft.officerNotificationChannels));
+
+        if (draft.documentType != null && !draft.documentType.trim().isEmpty()) {
+            cbDocumentType.setSelectedItem(draft.documentType);
         }
+        if (draft.filePath != null && !draft.filePath.trim().isEmpty()) {
+            selectedFile = new File(draft.filePath);
+            lblFileName.setText(selectedFile.getName());
+        }
+        txtDigitalSignature.setText(safeText(draft.digitalSignature));
+    }
+
+    private String normalizeNotificationChoice(String channels) {
+        String normalized = safeText(channels).replace(" ", "");
+        if (normalized.isEmpty()) {
+            return "EMAIL,SMS";
+        }
+        ComboBoxModel<String> model = cbApplicantNotificationChannels.getModel();
+        for (int i = 0; i < model.getSize(); i++) {
+            if (normalized.equals(model.getElementAt(i))) {
+                return normalized;
+            }
+        }
+        return "EMAIL,SMS";
+    }
+
+    private String safeText(String text) {
+        return text == null ? "" : text;
     }
 }

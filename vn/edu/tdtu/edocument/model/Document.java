@@ -18,6 +18,8 @@ public class Document {
     public String extractedContent;
     public String status;
     public int currentStep;
+    public String applicantNotificationChannels;
+    public String officerNotificationChannels;
 
     public Document(String id, String applicantName, String applicantEmail, String applicantPhone,
                     String officerName, String officerEmail, String officerPhone,
@@ -26,13 +28,24 @@ public class Document {
         this(id, applicantName, applicantEmail, applicantPhone,
                 officerName, officerEmail, officerPhone,
                 documentType, filePath, fileExtension,
-                fileSizeKB, digitalSignature, extractedContent, status, 3);
+                fileSizeKB, digitalSignature, extractedContent, status, 3, "EMAIL,SMS", "EMAIL,SMS");
     }
 
     public Document(String id, String applicantName, String applicantEmail, String applicantPhone,
                     String officerName, String officerEmail, String officerPhone,
                     String documentType, String filePath, String fileExtension,
                     long fileSizeKB, String digitalSignature, String extractedContent, String status, int currentStep) {
+        this(id, applicantName, applicantEmail, applicantPhone,
+                officerName, officerEmail, officerPhone,
+                documentType, filePath, fileExtension,
+                fileSizeKB, digitalSignature, extractedContent, status, currentStep, "EMAIL,SMS", "EMAIL,SMS");
+    }
+
+    public Document(String id, String applicantName, String applicantEmail, String applicantPhone,
+                    String officerName, String officerEmail, String officerPhone,
+                    String documentType, String filePath, String fileExtension,
+                    long fileSizeKB, String digitalSignature, String extractedContent, String status,
+                    int currentStep, String applicantNotificationChannels, String officerNotificationChannels) {
         this.id = id;
         this.applicantName = applicantName;
         this.applicantEmail = applicantEmail;
@@ -48,6 +61,8 @@ public class Document {
         this.extractedContent = extractedContent;
         this.status = status;
         this.currentStep = currentStep;
+        this.applicantNotificationChannels = applicantNotificationChannels;
+        this.officerNotificationChannels = officerNotificationChannels;
     }
 
     public static Builder builder() {
@@ -70,7 +85,9 @@ public class Document {
                 .digitalSignature(digitalSignature)
                 .extractedContent(extractedContent)
                 .status(status)
-                .currentStep(currentStep);
+                .currentStep(currentStep)
+                .applicantNotificationChannels(applicantNotificationChannels)
+                .officerNotificationChannels(officerNotificationChannels);
     }
 
     @Override
@@ -94,6 +111,8 @@ public class Document {
         private String extractedContent;
         private String status = "MOI_TAO";
         private int currentStep = 1;
+        private String applicantNotificationChannels = "EMAIL,SMS";
+        private String officerNotificationChannels = "EMAIL,SMS";
 
         public String getApplicantName() { return applicantName; }
         public String getApplicantEmail() { return applicantEmail; }
@@ -106,6 +125,8 @@ public class Document {
         public String getFileExtension() { return fileExtension; }
         public long getFileSizeKB() { return fileSizeKB; }
         public String getDigitalSignature() { return digitalSignature; }
+        public String getApplicantNotificationChannels() { return applicantNotificationChannels; }
+        public String getOfficerNotificationChannels() { return officerNotificationChannels; }
 
         public Builder id(String id) {
             this.id = id;
@@ -182,6 +203,16 @@ public class Document {
             return this;
         }
 
+        public Builder applicantNotificationChannels(String applicantNotificationChannels) {
+            this.applicantNotificationChannels = applicantNotificationChannels;
+            return this;
+        }
+
+        public Builder officerNotificationChannels(String officerNotificationChannels) {
+            this.officerNotificationChannels = officerNotificationChannels;
+            return this;
+        }
+
         public Builder applicantInfo(String name, String email, String phone) {
             this.applicantName = name;
             this.applicantEmail = email;
@@ -189,10 +220,26 @@ public class Document {
             return this;
         }
 
+        public Builder applicantInfo(String name, String email, String phone, String notificationChannels) {
+            this.applicantName = name;
+            this.applicantEmail = email;
+            this.applicantPhone = phone;
+            this.applicantNotificationChannels = notificationChannels;
+            return this;
+        }
+
         public Builder officerInfo(String name, String email, String phone) {
             this.officerName = name;
             this.officerEmail = email;
             this.officerPhone = phone;
+            return this;
+        }
+
+        public Builder officerInfo(String name, String email, String phone, String notificationChannels) {
+            this.officerName = name;
+            this.officerEmail = email;
+            this.officerPhone = phone;
+            this.officerNotificationChannels = notificationChannels;
             return this;
         }
 
@@ -208,7 +255,8 @@ public class Document {
             return new Document(id, applicantName, applicantEmail, applicantPhone,
                     officerName, officerEmail, officerPhone,
                     documentType, filePath, fileExtension,
-                    fileSizeKB, digitalSignature, extractedContent, status, currentStep);
+                    fileSizeKB, digitalSignature, extractedContent, status, currentStep,
+                    applicantNotificationChannels, officerNotificationChannels);
         }
     }
 }

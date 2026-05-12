@@ -6,10 +6,8 @@ import vn.edu.tdtu.edocument.service.DocumentProcessor;
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
-import java.io.File;
 import java.io.OutputStream;
 import java.io.PrintStream;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,7 +22,7 @@ public class MainSwingUI extends JFrame {
         processor = new DocumentProcessor();
         documentList = new ArrayList<>();
 
-        setTitle("Hệ thống Quản lý Hồ sơ Điện tử - v1.0 (Home)");
+        setTitle("Hệ thống Quản lý Hồ sơ Điện tử - v2.0");
         setSize(900, 700);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
@@ -49,8 +47,10 @@ public class MainSwingUI extends JFrame {
 
         JPanel toolBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
         JButton btnAdd = new JButton("Thêm mới hồ sơ");
+        JButton btnResumeDraft = new JButton("Tiếp tục hồ sơ nháp");
         JButton btnClear = new JButton("Xóa Log");
         toolBar.add(btnAdd);
+        toolBar.add(btnResumeDraft);
         toolBar.add(btnClear);
         add(toolBar, BorderLayout.NORTH);
 
@@ -65,6 +65,7 @@ public class MainSwingUI extends JFrame {
         });
 
         btnClear.addActionListener(e -> consoleArea.setText(""));
+        btnResumeDraft.addActionListener(e -> resumeSelectedDraft());
 
         documentTable.getSelectionModel().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && documentTable.getSelectedRow() != -1) {
@@ -75,7 +76,9 @@ public class MainSwingUI extends JFrame {
                     if (doc.id.equals(docId)) {
                         System.out.println("\n--- CHI TIẾT HỒ SƠ: " + doc.id + " ---");
                         System.out.println("Người nộp: " + doc.applicantName + " | Email: " + doc.applicantEmail + " | SĐT: " + doc.applicantPhone);
+                        System.out.println("Kênh TB người nộp: " + doc.applicantNotificationChannels);
                         System.out.println("Cán bộ tiếp nhận: " + doc.officerName + " | Email: " + doc.officerEmail + " | SĐT: " + doc.officerPhone);
+                        System.out.println("Kênh TB cán bộ: " + doc.officerNotificationChannels);
                         System.out.println("Loại hồ sơ: " + doc.documentType);
                         System.out.println("Đường dẫn tệp: " + doc.filePath + " (" + doc.fileSizeKB + " KB)");
                         System.out.println("Chữ ký số: " + doc.digitalSignature);
@@ -89,78 +92,8 @@ public class MainSwingUI extends JFrame {
     }
 
     private void loadExistingDocuments() {
-        File storageDir = new File("server_storage");
-        if (storageDir.exists() && storageDir.isDirectory()) {
-            File[] files = storageDir.listFiles((dir, name) -> name.endsWith("_data.json"));
-            if (files != null) {
-                for (File file : files) {
-                    try {
-                        String content = new String(Files.readAllBytes(file.toPath()));
-                        Document doc = parseJsonToDocument(content);
-                        if (doc != null) {
-                            documentList.add(doc);
-                        }
-                    } catch (Exception e) {
-                        System.out.println("[LỖI LOAD] Không thể nạp hồ sơ: " + file.getName());
-                    }
-                }
-            }
-        }
-    }
-
-    private Document parseJsonToDocument(String json) {
-        try {
-            String id = extractValue(json, "id");
-            String applicantName = extractValue(json, "applicantName");
-            String applicantEmail = extractValue(json, "applicantEmail");
-            String applicantPhone = extractValue(json, "applicantPhone");
-            String officerName = extractValue(json, "officerName");
-            String officerEmail = extractValue(json, "officerEmail");
-            String officerPhone = extractValue(json, "officerPhone");
-            String documentType = extractValue(json, "documentType");
-            String filePath = extractValue(json, "filePath");
-            String fileExtension = extractValue(json, "fileExtension");
-            long fileSizeKB = Long.parseLong(extractValue(json, "fileSizeKB"));
-            String digitalSignature = extractValue(json, "digitalSignature");
-            String status = extractValue(json, "status");
-            String currentStepRaw = tryExtractValue(json, "currentStep");
-            int currentStep = 3;
-            if (currentStepRaw != null && !currentStepRaw.isEmpty()) {
-                currentStep = Integer.parseInt(currentStepRaw);
-            }
-
-            return new Document(id, applicantName, applicantEmail, applicantPhone,
-                    officerName, officerEmail, officerPhone, documentType,
-                    filePath, fileExtension, fileSizeKB, digitalSignature, null, status, currentStep);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private String extractValue(String json, String key) {
-        String pattern = "\"" + key + "\": ";
-        int keyPos = json.indexOf(pattern);
-        if (keyPos < 0) {
-            throw new IllegalArgumentException("Missing key: " + key);
-        }
-        int start = keyPos + pattern.length();
-        if (json.charAt(start) == '\"') {
-            start++;
-            int end = json.indexOf("\"", start);
-            return json.substring(start, end);
-        } else {
-            int end = json.indexOf(",", start);
-            if (end == -1) end = json.indexOf("\n", start);
-            return json.substring(start, end).trim();
-        }
-    }
-
-    private String tryExtractValue(String json, String key) {
-        try {
-            return extractValue(json, key);
-        } catch (Exception e) {
-            return null;
-        }
+        documentList.clear();
+        documentList.addAll(processor.loadDocuments());
     }
 
     public void addDocumentToList(Document doc) {
@@ -182,6 +115,39 @@ public class MainSwingUI extends JFrame {
                 doc.id, doc.applicantName, doc.documentType, doc.status, doc.currentStep, doc.fileExtension
             });
         }
+    }
+
+    private void resumeSelectedDraft() {
+        int selectedRow = documentTable.getSelectedRow();
+        if (selectedRow == -1) {
+            JOptionPane.showMessageDialog(this, "Vui lòng chọn một hồ sơ nháp để tiếp tục.", "Thông báo", JOptionPane.INFORMATION_MESSAGE);
+            return;
+        }
+
+        String docId = tableModel.getValueAt(selectedRow, 0).toString();
+        Document selectedDocument = findDocumentById(docId);
+        if (selectedDocument == null) {
+            JOptionPane.showMessageDialog(this, "Không tìm thấy hồ sơ đã chọn.", "Lỗi", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        if (!"LUU_NHAP".equals(selectedDocument.status)) {
+            JOptionPane.showMessageDialog(this, "Chỉ có thể tiếp tục hồ sơ ở trạng thái LUU_NHAP.", "Thông báo", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        AddDocumentDialog dialog = new AddDocumentDialog(this, processor, selectedDocument);
+        dialog.setVisible(true);
+        refreshTable();
+    }
+
+    private Document findDocumentById(String id) {
+        for (Document doc : documentList) {
+            if (doc.id.equals(id)) {
+                return doc;
+            }
+        }
+        return null;
     }
 
     private void redirectSystemStreams() {

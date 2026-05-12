@@ -1,49 +1,48 @@
 package vn.edu.tdtu.edocument.service;
 
 import vn.edu.tdtu.edocument.model.Document;
+import vn.edu.tdtu.edocument.service.extraction.ContentExtractionStrategy;
+import vn.edu.tdtu.edocument.service.extraction.OcrExtractionStrategy;
+import vn.edu.tdtu.edocument.service.extraction.TxtExtractionStrategy;
+import vn.edu.tdtu.edocument.service.notification.DocumentNotificationService;
+import vn.edu.tdtu.edocument.service.ocr.AiOcrService;
+import vn.edu.tdtu.edocument.service.ocr.MockAiOcrService;
+import vn.edu.tdtu.edocument.service.review.AntivirusReviewStation;
+import vn.edu.tdtu.edocument.service.review.BasicValidityReviewStation;
+import vn.edu.tdtu.edocument.service.review.DuplicateSubmissionReviewStation;
+import vn.edu.tdtu.edocument.service.review.ReviewException;
+import vn.edu.tdtu.edocument.service.review.ReviewPipeline;
+import vn.edu.tdtu.edocument.service.review.ReviewStation;
+import vn.edu.tdtu.edocument.service.storage.DocumentStorage;
+import vn.edu.tdtu.edocument.service.storage.DocumentStorageFactory;
 
-import java.io.File;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 public class DocumentProcessor {
     private final Map<String, ContentExtractionStrategy> extractionStrategies;
-    private final AiOcrService aiOcrService;
+    private final ReviewPipeline reviewPipeline;
+    private final DuplicateSubmissionReviewStation duplicateSubmissionReviewStation;
+    private final DocumentNotificationService notificationService;
+    private DocumentStorage documentStorage;
 
     public DocumentProcessor() {
-        this.aiOcrService = new MockAiOcrService();
+        AiOcrService aiOcrService = new MockAiOcrService();
         this.extractionStrategies = new HashMap<>();
+        this.reviewPipeline = new ReviewPipeline();
+        this.notificationService = new DocumentNotificationService();
+        this.documentStorage = DocumentStorageFactory.create();
         registerStrategy("txt", new TxtExtractionStrategy());
-        registerStrategy("pdf", new OcrExtractionStrategy());
-        registerStrategy("jpg", new OcrExtractionStrategy());
-        registerStrategy("png", new OcrExtractionStrategy());
-    }
-
-    private void registerStrategy(String extension, ContentExtractionStrategy strategy) {
-        extractionStrategies.put(extension.toLowerCase(Locale.ROOT), strategy);
-    }
-
-    private String normalizeExtension(String extension) {
-        if (extension == null) {
-            return "";
-        }
-        return extension.trim().toLowerCase(Locale.ROOT);
-    }
-
-    public void saveDraft(Document doc) {
-        doc.status = "LUU_NHAP";
-        System.out.println("\n=======================================================");
-        System.out.println("[LUU NHAP] Dang luu ho so ID: " + doc.id + " tai buoc " + doc.currentStep);
-        saveToStorage(doc);
-        System.out.println("[LUU NHAP] Ho so da duoc luu.");
+        registerStrategy("pdf", new OcrExtractionStrategy(aiOcrService));
+        registerStrategy("jpg", new OcrExtractionStrategy(aiOcrService));
+        registerStrategy("png", new OcrExtractionStrategy(aiOcrService));
+        this.duplicateSubmissionReviewStation = new DuplicateSubmissionReviewStation();
+        configureDefaultReviewStations();
     }
 
     public void process(Document doc) {
@@ -62,129 +61,106 @@ public class DocumentProcessor {
             doc.fileExtension == null || doc.fileExtension.isEmpty() ||
             doc.digitalSignature == null || doc.digitalSignature.isEmpty()) {
             
-            System.out.println("[LỖI TIẾP NHẬN] Thiếu trường thông tin bắt buộc. Hủy tạo hồ sơ.");
+            System.out.println("[LOI TIEP NHAN] Thieu truong thong tin bat buoc. Huy tao ho so.");
             return;
         }
 
         doc.status = "DA_TIEP_NHAN";
         sendNotifications(doc);
 
-        System.out.println("[KIỂM DUYỆT] Đang kiểm tra dung lượng và định dạng...");
-        if (doc.fileSizeKB > 5120) {
-            System.out.println("[TỪ CHỐI] Dung lượng file " + doc.fileSizeKB + "KB vượt quá 5MB.");
+        String normalizedExtension = normalizeExtension(doc.fileExtension);
+        try {
+            reviewPipeline.execute(doc);
+        } catch (ReviewException e) {
+            System.out.println("[TU CHOI] " + e.getMessage());
             doc.status = "TU_CHOI";
             sendNotifications(doc);
             return;
         }
 
-        String normalizedExtension = normalizeExtension(doc.fileExtension);
         ContentExtractionStrategy extractionStrategy = extractionStrategies.get(normalizedExtension);
         if (extractionStrategy == null) {
-            System.out.println("[TỪ CHỐI] Định dạng " + doc.fileExtension + " không được hỗ trợ.");
+            System.out.println("[TU CHOI] Khong tim thay bo xu ly cho dinh dang " + doc.fileExtension + ".");
             doc.status = "TU_CHOI";
             sendNotifications(doc);
             return;
         }
 
-        System.out.println("[TRÍCH XUẤT] Đang đọc nội dung tệp đính kèm...");
+        System.out.println("[TRICH XUAT] Dang doc noi dung tep dinh kem...");
         try {
             doc.extractedContent = extractionStrategy.extractText(doc.filePath, normalizedExtension);
         } catch (IOException e) {
-            System.out.println("[LỖI] Không thể đọc nội dung file: " + e.getMessage());
+            System.out.println("[LOI] Khong the doc noi dung file: " + e.getMessage());
             doc.status = "TU_CHOI";
             sendNotifications(doc);
             return;
         }
 
-        System.out.println("[HOÀN TẤT] Hồ sơ hợp lệ và đã được lưu trữ thành công.");
         doc.status = "DANG_XET_DUYET";
         doc.currentStep = 3;
-        System.out.println("[LƯU TRỮ] Đang sao chép file và xuất dữ liệu JSON...");
-        saveToStorage(doc);
+        System.out.println("[HOAN TAT] Ho so hop le, dang luu tru...");
+        saveDocument(doc);
+        duplicateSubmissionReviewStation.registerProcessedDocument(doc);
         sendNotifications(doc);
     }
 
-    private void saveToStorage(Document doc) {
-        String storageDirPath = "server_storage";
-        File storageDir = new File(storageDirPath);
-        if (!storageDir.exists()) {
-            storageDir.mkdir();
+    private void registerStrategy(String extension, ContentExtractionStrategy strategy) {
+        extractionStrategies.put(extension.toLowerCase(Locale.ROOT), strategy);
+    }
+
+    private String normalizeExtension(String extension) {
+        if (extension == null) {
+            return "";
         }
+        return extension.trim().toLowerCase(Locale.ROOT);
+    }
 
-        try {
-            String storedFilePath = "";
-            if (doc.filePath != null && !doc.filePath.trim().isEmpty()) {
-                Path sourcePath = Paths.get(doc.filePath);
-                Path targetPath = Paths.get(storageDirPath + File.separator + doc.id + "_" + sourcePath.getFileName().toString());
-                Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
-                storedFilePath = targetPath.toString().replace("\\", "\\\\");
-            }
-
-            String json = "{\n" +
-                    "  \"id\": \"" + doc.id + "\",\n" +
-                    "  \"applicantName\": \"" + doc.applicantName + "\",\n" +
-                    "  \"applicantEmail\": \"" + doc.applicantEmail + "\",\n" +
-                    "  \"applicantPhone\": \"" + doc.applicantPhone + "\",\n" +
-                    "  \"officerName\": \"" + doc.officerName + "\",\n" +
-                    "  \"officerEmail\": \"" + doc.officerEmail + "\",\n" +
-                    "  \"officerPhone\": \"" + doc.officerPhone + "\",\n" +
-                    "  \"documentType\": \"" + doc.documentType + "\",\n" +
-                    "  \"filePath\": \"" + storedFilePath + "\",\n" +
-                    "  \"fileExtension\": \"" + doc.fileExtension + "\",\n" +
-                    "  \"fileSizeKB\": " + doc.fileSizeKB + ",\n" +
-                    "  \"digitalSignature\": \"" + doc.digitalSignature + "\",\n" +
-                    "  \"currentStep\": " + doc.currentStep + ",\n" +
-                    "  \"status\": \"" + doc.status + "\"\n" +
-                    "}";
-
-            File dataFile = new File(storageDirPath + File.separator + doc.id + "_data.json");
-            FileWriter writer = new FileWriter(dataFile);
-            writer.write(json);
-            writer.close();
-
-        } catch (IOException e) {
-            System.out.println("[LỖI HỆ THỐNG] Lỗi khi lưu trữ vật lý: " + e.getMessage());
-        }
+    public void saveDraft(Document doc) {
+        doc.status = "LUU_NHAP";
+        System.out.println("\n=======================================================");
+        System.out.println("[LUU NHAP] Dang luu ho so ID: " + doc.id + " tai buoc " + doc.currentStep);
+        saveDocument(doc);
+        System.out.println("[LUU NHAP] Ho so da duoc luu.");
     }
 
     private void sendNotifications(Document doc) {
-        System.out.println("  [GỬI EMAIL] -> Người nộp (" + doc.applicantEmail + "): Hồ sơ chuyển sang trạng thái " + doc.status);
-        System.out.println("  [GỬI SMS]   -> Người nộp (" + doc.applicantPhone + "): Hồ sơ chuyển sang trạng thái " + doc.status);
-        System.out.println("  [GỬI EMAIL] -> Cán bộ xử lý (" + doc.officerEmail + "): Hồ sơ chuyển sang trạng thái " + doc.status);
-        System.out.println("  [GỬI SMS]   -> Cán bộ xử lý (" + doc.officerPhone + "): Hồ sơ chuyển sang trạng thái " + doc.status);
+        notificationService.notifyStatusChanged(doc);
     }
 
-    private interface ContentExtractionStrategy {
-        String extractText(String filePath, String extension) throws IOException;
+    private void configureDefaultReviewStations() {
+        reviewPipeline.setStations(Arrays.asList(
+                new BasicValidityReviewStation(extractionStrategies.keySet()),
+                new AntivirusReviewStation(),
+                duplicateSubmissionReviewStation
+        ));
     }
 
-    private static class TxtExtractionStrategy implements ContentExtractionStrategy {
-        @Override
-        public String extractText(String filePath, String extension) throws IOException {
-            return new String(Files.readAllBytes(Paths.get(filePath)), StandardCharsets.UTF_8);
+    public void setReviewStations(List<ReviewStation> stations) {
+        reviewPipeline.setStations(stations);
+    }
+
+    public void addReviewStation(ReviewStation station) {
+        reviewPipeline.addStation(station);
+    }
+
+    public void clearReviewStations() {
+        reviewPipeline.clearStations();
+    }
+
+    public List<Document> loadDocuments() {
+        try {
+            return documentStorage.loadAll();
+        } catch (IOException e) {
+            System.out.println("[LOI HE THONG] Khong the tai du lieu: " + e.getMessage());
+            return Collections.emptyList();
         }
     }
 
-    private class OcrExtractionStrategy implements ContentExtractionStrategy {
-        @Override
-        public String extractText(String filePath, String extension) throws IOException {
-            return aiOcrService.extract(filePath, extension);
-        }
-    }
-
-    private interface AiOcrService {
-        String extract(String filePath, String extension) throws IOException;
-    }
-
-    private static class MockAiOcrService implements AiOcrService {
-        @Override
-        public String extract(String filePath, String extension) throws IOException {
-            Path path = Paths.get(filePath);
-            if (!Files.exists(path)) {
-                throw new IOException("File khong ton tai: " + filePath);
-            }
-
-            return "[AI_OCR:" + extension.toUpperCase(Locale.ROOT) + "] NOI_DUNG_TRICH_XUAT_TU_" + path.getFileName().toString();
+    private void saveDocument(Document doc) {
+        try {
+            documentStorage.save(doc);
+        } catch (IOException e) {
+            System.out.println("[LOI HE THONG] Loi khi luu tru du lieu: " + e.getMessage());
         }
     }
 }
