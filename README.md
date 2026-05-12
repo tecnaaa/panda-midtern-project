@@ -11,7 +11,6 @@ panda-midtern-project/
 ├── README.md
 ├── run.bat                          ← Script chạy nhanh trên Windows
 ├── DESIGN_PATTERN_UPGRADE_NOTES.md  ← Tài liệu thiết kế chi tiết
-├── server_storage/                  ← Thư mục lưu dữ liệu JSON (tự tạo khi chạy)
 └── vn/edu/tdtu/edocument/
     ├── MainSwingUI.java             ← Giao diện chính
     ├── AddDocumentDialog.java       ← Dialog nhập hồ sơ theo từng bước
@@ -19,12 +18,12 @@ panda-midtern-project/
     │   └── Document.java           ← Model hồ sơ + Builder
     └── service/
         ├── DocumentProcessor.java   ← Bộ xử lý nghiệp vụ trung tâm
-        ├── extraction/              ← Strategy trích xuất nội dung (Yêu cầu 2)
-        ├── notification/            ← Observer + Strategy gửi thông báo (Yêu cầu 4)
+        ├── extraction/              ← Strategy trích xuất nội dung (Yc 2)
+        ├── notification/            ← Observer + Strategy gửi tb (Yc 4)
         ├── ocr/                     ← Mock AI OCR service
-        ├── review/                  ← Pipeline kiểm duyệt (Yêu cầu 3)
-        ├── storage/                 ← Factory + Strategy lưu trữ (Yêu cầu 5)
-        └── workflow/                ← State Machine luồng nộp hồ sơ (Yêu cầu 1)
+        ├── review/                  ← Pipeline kiểm duyệt (Yc 3)
+        ├── storage/                 ← Factory + Strategy lưu trữ (Yc 5)
+        └── workflow/                ← State Machine luồng nộp hồ sơ (Yc 1)
 ```
 
 ---
