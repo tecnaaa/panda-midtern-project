@@ -8,9 +8,8 @@ Dự án nâng cấp hệ thống quản lý hồ sơ điện tử từ phiên b
 
 ```
 panda-midtern-project/
-├── README.md
+├── README.md                        ← Tài liệu hướng dẫn chạy
 ├── run.bat                          ← Script chạy nhanh trên Windows
-├── DESIGN_PATTERN_UPGRADE_NOTES.md  ← Tài liệu thiết kế chi tiết
 └── vn/edu/tdtu/edocument/
     ├── MainSwingUI.java             ← Giao diện chính
     ├── AddDocumentDialog.java       ← Dialog nhập hồ sơ theo từng bước
@@ -18,12 +17,12 @@ panda-midtern-project/
     │   └── Document.java           ← Model hồ sơ + Builder
     └── service/
         ├── DocumentProcessor.java   ← Bộ xử lý nghiệp vụ trung tâm
-        ├── extraction/              ← Strategy trích xuất nội dung (Yc 2)
-        ├── notification/            ← Observer + Strategy gửi tb (Yc 4)
+        ├── extraction/              ← Strategy trích xuất nội dung từ file(Yêu cầu 2)
+        ├── notification/            ← Observer + Strategy gửi tb (Yêu cầu 4)
         ├── ocr/                     ← Mock AI OCR service
-        ├── review/                  ← Pipeline kiểm duyệt (Yc 3)
-        ├── storage/                 ← Factory + Strategy lưu trữ (Yc 5)
-        └── workflow/                ← State Machine luồng nộp hồ sơ (Yc 1)
+        ├── review/                  ← Pipeline kiểm duyệt (Yêu cầu 3)
+        ├── storage/                 ← Factory + Strategy lưu trữ (Yêu cầu 5)
+        └── workflow/                ← State Machine luồng nộp hồ sơ (Yêu cầu 1)
 ```
 
 ---
