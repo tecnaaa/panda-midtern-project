@@ -56,7 +56,10 @@ git clone https://github.com/tecnaaa/panda-midtern-project.git
 cd panda-midtern-project
 ```
 
-**Bước 3 – Double-click vào file `run.bat`**
+**Bước 3 – click chuột vào file `run.bat` và bấm tổ hợp phím ctrl + alt + N hoặc gõ lệnh trong terminal**
+```cmd
+./run
+```
 - Cửa sổ cmd sẽ mở ra, tự động biên dịch và khởi chạy ứng dụng
 - Giao diện Swing sẽ hiện ra sau vài giây
 
